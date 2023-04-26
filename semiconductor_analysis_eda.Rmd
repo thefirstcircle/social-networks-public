@@ -1,0 +1,110 @@
+---
+title: "Semiconductor Analysis"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(igraph)
+library(ggraph)
+```
+
+
+```{r}
+inputs <- read_csv("https://raw.githubusercontent.com/georgetown-cset/eto-supply-chain/main/data/inputs.csv")
+providers <- read_csv("https://raw.githubusercontent.com/georgetown-cset/eto-supply-chain/main/data/providers.csv")
+provision <- read_csv("https://raw.githubusercontent.com/georgetown-cset/eto-supply-chain/main/data/provision.csv")
+sequence <- read_csv("https://raw.githubusercontent.com/georgetown-cset/eto-supply-chain/main/data/sequence.csv")
+stages <- read_csv("https://raw.githubusercontent.com/georgetown-cset/eto-supply-chain/main/data/stages.csv")
+```
+
+
+```{r}
+sequence_edges <- sequence %>%
+  mutate(goes_into_name = if_else(is.na(goes_into_name), is_type_of_name, goes_into_name)) %>% 
+  rename(from = input_name) %>%
+  rename(to = goes_into_name) %>% 
+  select(from, to)
+
+sequence.ig <- graph_from_data_frame(sequence_edges, directed = TRUE)
+```
+
+```{r}
+# plot the graph
+plot(sequence.ig, 
+     vertex.label.color = "black",
+     vertex.color = "lightblue", 
+     vertex.frame.color = "white", 
+     vertex.size = 10, 
+     edge.arrow.size = 0.5, 
+     layout = layout.fruchterman.reingold,
+     main = "Sequence of Processes")
+
+```
+```{r}
+ggraph(sequence.ig) +
+  #geom_edge_link() +
+  geom_edge_link2(arrow = arrow(length = unit(0.25, "cm"), type = "open")) +
+  geom_node_point() +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_void()
+```
+```{r}
+sequence.ig %>% 
+  ggraph(layout = "fr") +
+  geom_edge_link2(arrow = arrow(length = unit(0.25, "cm"), type = "open")) +
+  #geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name),repel = TRUE, size = 2, color = "black") +
+  theme_void()
+```
+```{r}
+provision %>% 
+  left_join(providers, by = "provider_name") %>% 
+  filter(is.na(negligible_market_share)) %>% 
+  filter(provider_type == "country") %>% 
+  filter(!str_starts(provided_id, "S")) 
+```
+```{r}
+triad_chart_func <- function(data) {
+
+triad_data <- igraph::triad_census(data)
+
+triad_types <- c(
+'003' = 'A,B,C, empty triad.',
+'012' = 'A->B, C, triad with a single directed edge.',
+'102' = 'A<->B, C, triad with a reciprocated connection between two vertices.',
+'021D' = 'A<-B->C, triadic out-star.',
+'021U' = 'A->B<-C triadic in-star.',
+'021C' = 'A->B->C, directed line.',
+'111D' = 'A<->B<-C.',
+'111U' = 'A<->B->C.',
+'030T' = 'A->B<-C, A->C.',
+'030C' = 'A<-B<-C, A->C.',
+'201' = 'A<->B<->C.',
+'120D' = 'A<-B->C, A<->C.',
+'120U' = 'A->B<-C, A<->C.',
+'120C' = 'A->B->C, A<->C.',
+'210' = 'A->B<->C, A<->C.',
+'300' = 'A<->B<->C, A<->C,  complete triad.'
+)
+
+names(triad_data) <- triad_types
+triad_data <- data.frame(triad_data)
+triad_data$triad_type <- row.names(triad_data)
+
+ggplot(triad_data, aes(x = triad_type, y = triad_data)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(x = "", y = "Frequency", 
+       title = "Frequency of Triad Types") +
+  theme_classic()
+
+}
+```
+
+```{r}
+triad_chart_func(sequence.ig)
+```
+
+
